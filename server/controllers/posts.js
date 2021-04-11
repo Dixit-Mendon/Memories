@@ -12,7 +12,7 @@ export const getPosts = async (req, res) => {
 
 export const createPost = async (req, res) => {
     const post = req.body;
-    const newPost = new PostMessage(post);
+    const newPost = new PostMessage({...post, creator:req.userId, createdAt:new Date().toISOString()});
     try {
         await newPost.save();
         res.status(201).json(newPost);
@@ -44,10 +44,25 @@ export const deletePost = async (req, res) => {
 
 export const likePost = async (req, res) => {
     const { id } = req.params;
+
+    //req.userId -- This is really really important to mention. If we call a middleware before a specific action like in router.patch('/:id/likePost', auth, likePost) then we can populate the request and then we will have access to that request in the next action (in this case likePost). That is the request will have that property which can be accessed int this controller also
+    if (!req.userId) return res.json({ message: 'Unauthenticated' });
+
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(404).send('No post with that id');
 
     const post = await PostMessage.findById(id);
-    const updatedPost = await PostMessage.findByIdAndUpdate(id, { likeCount: post.likeCount + 1 }, { new: true });
+
+    const index = post.likes.findIndex((id) => id === String(req.userId));
+
+    if (index === -1) {
+        //like the post
+        post.likes.push(req.userId);
+    } else {
+        //dislike the post (i.e. remove the like)
+        post.likes = post.likes.filter((id) => id !== String(req.userId));
+    }
+
+    const updatedPost = await PostMessage.findByIdAndUpdate(id, post, { new: true });
 
     res.json(updatedPost);
 }
